@@ -1,31 +1,48 @@
 import socket
+import os
 
-sock = socket.socket()
 
-try:
-    sock.bind(('', 80))
-    print("Using port 80")
-except OSError:
-    sock.bind(('', 8080))
-    print("Using port 8080")
+def handle_request(data):
+    """ Обработка входящего запроса и определение запрашиваемого ресурса """
+    headers = data.split('\n')
+    first_line = headers[0]
+    filename = first_line.split()[1]
 
-sock.listen(5)
+    if filename == '/':
+        filename = '/index.html'
 
-conn, addr = sock.accept()
-print("Connected", addr)
+    return filename
 
-data = conn.recv(8192)
-msg = data.decode()
 
-print(msg)
+def serve_file(filepath):
+    """ Попытка чтения файла и возврат его содержимого с HTTP-заголовками """
+    try:
+        with open(filepath, 'rb') as f:
+            content = f.read()
+        response = b'HTTP/1.1 200 OK\n\n' + content
+    except FileNotFoundError:
+        response = b'HTTP/1.1 404 NOT FOUND\n\nFile Not Found'
+    return response
 
-resp = """HTTP/1.1 200 OK
-Server: SelfMadeServer v0.0.1
-Content-type: text/html
-Connection: close
 
-Hello, webworld!"""
+def start_server(host='', port=80):
+    """ Запуск сервера, который слушает порт 80 """
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((host, port))
+    server_socket.listen(5)
+    print(f"Сервер запущен на порту {port}...")
 
-conn.send(resp.encode())
+    while True:
+        client_socket, addr = server_socket.accept()
+        print(f"Подключен клиент: {addr}")
+        request = client_socket.recv(1024).decode('utf-8')
+        filename = handle_request(request)
+        filepath = os.path.join(os.getcwd(), 'server_workdir', filename.strip('/'))
+        response = serve_file(filepath)
+        client_socket.sendall(response)
+        client_socket.close()
 
-conn.close()
+
+# Запуск сервера
+if __name__ == "__main__":
+    start_server()
